@@ -162,3 +162,5 @@ cython_debug/
 #.idea/
 
 *Zania _ Challenge for AI Engineers*
+node_modules/
+*package-lock*
