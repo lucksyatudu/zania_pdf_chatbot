@@ -2,20 +2,14 @@ import os
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from PyPDF2 import PdfReader
-from langchain.llms import OpenAI
-from io import BytesIO
 from pydantic import BaseModel
-
-class QuestionRequest(BaseModel):
-    question: str
-
-# Initialize OpenAI API
-openai_api_key = os.getenv('OPENAI_API_KEY')
+from openai import OpenAI
+from io import BytesIO
 
 app = FastAPI()
 
 # Allow CORS for frontend access
-origins = ["http://localhost:3000"]  # Frontend origin (React app)
+origins = ["http://localhost:3000"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -24,8 +18,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Store extracted PDF text globally (in-memory storage for demo purposes)
+# Global variable to store extracted PDF text
 pdf_text = ""
+
+# Model for asking multiple questions
+class QuestionsRequest(BaseModel):
+    questions: list[str]
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
@@ -45,18 +43,41 @@ async def upload_pdf(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 
-@app.post("/ask-question")
-async def ask_question(request: QuestionRequest):
-    question = request.question
+@app.post("/ask-questions")
+async def ask_questions(request: QuestionsRequest):
+    global pdf_text
     if not pdf_text:
         raise HTTPException(status_code=400, detail="No PDF uploaded or processed yet")
 
-    # Use Langchain with OpenAI to process the question and generate an answer
-    try:
-        llm = OpenAI(openai_api_key=openai_api_key)
-        prompt = f"Based on the document, {pdf_text} answer the question: {question}"
-        answer = llm(prompt)
+    # Initialize OpenAI API
+    llm = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-        return {"answer": answer}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
+    # Prepare the response JSON
+    response = {}
+
+    # Loop through each question
+    for question in request.questions:
+        # Check for word-to-word match in PDF text
+        if question.lower() in pdf_text.lower():
+            response[question] = "Exact match found in PDF: " + question
+        else:
+            # Use OpenAI to generate the answer
+            prompt = f"Based on the following document:\n{pdf_text}\n\nAnswer the question: {question}"
+            completion = llm.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ]
+            )
+            answer = completion.choices[0].message.content
+
+            # Heuristic check for low-confidence answers
+            if len(answer.strip()) < 5 or "I don't know" in answer or "unsure" in answer:
+                response[question] = "Data Not Available"
+            else:
+                response[question] = answer
+
+    # Return the structured JSON response
+    print(response)
+    return response

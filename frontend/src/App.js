@@ -1,97 +1,108 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 
-const App = () => {
-    const [file, setFile] = useState(null);
-    const [question, setQuestion] = useState('');
-    const [answer, setAnswer] = useState('');
+function App() {
+  const [pdfFile, setPdfFile] = useState(null);
+  const [questions, setQuestions] = useState(''); // Text area for multiple questions
+  const [answers, setAnswers] = useState({}); // To store answers in key-value format
+  const [uploadMessage, setUploadMessage] = useState('');
 
-    const handleFileChange = (event) => {
-        setFile(event.target.files[0]);
-    };
+  // Handle PDF file upload
+  const handleFileChange = (e) => {
+    setPdfFile(e.target.files[0]);
+  };
 
-    const handleUpload = async (event) => {
-        event.preventDefault();
-        if (!file) {
-            console.error("No file selected");
-            return;
-        }
+  // Handle questions change (textarea)
+  const handleQuestionsChange = (e) => {
+    setQuestions(e.target.value);
+  };
 
-        const formData = new FormData();
-        formData.append('file', file);
+  // Upload PDF file to the backend
+  const handleUpload = async () => {
+    if (!pdfFile) {
+      alert('Please select a PDF file to upload');
+      return;
+    }
 
-        try {
-            const response = await fetch('http://localhost:8000/upload', {
-                method: 'POST',
-                body: formData,
-            });
+    const formData = new FormData();
+    formData.append('file', pdfFile);
 
-            const result = await response.json();
-            if (response.ok) {
-                console.log(result.message);
-                alert("File uploaded successfully");
-            } else {
-                console.error(result.detail);
-                alert(result.detail);
-            }
-        } catch (error) {
-            console.error('Error uploading file:', error);
-        }
-    };
+    try {
+      const response = await axios.post('http://localhost:8000/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      setUploadMessage(response.data.message);
+    } catch (error) {
+      console.error('Error uploading PDF:', error);
+      setUploadMessage('Failed to upload PDF');
+    }
+  };
 
-    const handleAskQuestion = async (event) => {
-        event.preventDefault();
-        if (!question) {
-            console.error("No question provided");
-            return;
-        }
+  // Submit the questions and get answers from backend
+  const handleAskQuestions = async () => {
+    if (!questions.trim()) {
+      alert('Please enter at least one question.');
+      return;
+    }
 
-        try {
-            const response = await fetch('http://localhost:8000/ask-question', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ question }),
-            });
+    // Split the input by new lines to create an array of questions
+    const questionArray = questions.trim().split('\n').filter((q) => q.trim() !== '');
 
-            const result = await response.json();
-            if (response.ok) {
-                setAnswer(result.answer);
-            } else {
-                console.error(result.detail);
-                alert(result.detail);
-            }
-        } catch (error) {
-            console.error('Error asking question:', error);
-        }
-    };
+    if (questionArray.length === 0) {
+      alert('Please enter valid questions.');
+      return;
+    }
 
-    return (
+    try {
+      const response = await axios.post('http://localhost:8000/ask-questions', {
+        questions: questionArray, // Send the array of questions to the backend
+      });
+
+      setAnswers(response.data); // Store the answers in state
+    } catch (error) {
+      console.error('Error fetching answers:', error);
+    }
+  };
+
+  return (
+    <div className="App">
+      <h1>Document QA System</h1>
+
+      <div>
+        <label>Upload PDF Document:</label>
+        <input type="file" accept="application/pdf" onChange={handleFileChange} />
+        <button onClick={handleUpload}>Upload PDF</button>
+      </div>
+
+      {uploadMessage && <p>{uploadMessage}</p>}
+
+      <div>
+        <label>Enter Questions (one per line):</label>
+        <textarea
+          rows="5"
+          value={questions}
+          onChange={handleQuestionsChange}
+          placeholder="Enter multiple questions, one per line"
+        />
+        <button onClick={handleAskQuestions}>Ask Questions</button>
+      </div>
+
+      {Object.keys(answers).length > 0 && (
         <div>
-            <h1>PDF Upload and Question Answering App</h1>
-            <form onSubmit={handleUpload}>
-                <input type="file" onChange={handleFileChange} accept="application/pdf" />
-                <button type="submit">Upload PDF</button>
-            </form>
-
-            <form onSubmit={handleAskQuestion}>
-                <input 
-                    type="text" 
-                    placeholder="Ask a question based on the document" 
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)} 
-                />
-                <button type="submit">Ask Question</button>
-            </form>
-
-            {answer && (
-                <div>
-                    <h3>Answer:</h3>
-                    <p>{answer}</p>
-                </div>
-            )}
+          <h2>Answers:</h2>
+          <ul>
+            {Object.entries(answers).map(([question, answer], index) => (
+              <li key={index}>
+                <strong>{question}</strong>: {answer}
+              </li>
+            ))}
+          </ul>
         </div>
-    );
-};
+      )}
+    </div>
+  );
+}
 
 export default App;
