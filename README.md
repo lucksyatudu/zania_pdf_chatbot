@@ -28,8 +28,8 @@
 
 3. How you would have made your code more modular, scalable and production grade
 
-    - Use of better error handeling and input validation
+    - Use of better error handling and input validation
     - Logging
-    - Modularization of frontend and backend codes to handle different functions in seperate files
-    
+    - Modularization of frontend and backend codes to handle different functions in separate files
+
 4. A video or demo of your program in action.
